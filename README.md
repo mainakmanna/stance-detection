@@ -1,1 +1,1 @@
-#Solution to the Fake News Challenge
+# **Solution to the Fake News Challenge**
