@@ -4,7 +4,7 @@ from preprocess import processDataset
 
 def loadWord2VecOnGoogleDataset():
     model = KeyedVectors.load_word2vec_format("./models/GoogleNews-vectors-negative300.bin", binary = True)
-    print(model.most_similar(positive=['woman', 'king'], negative=['man']))
+    #print(model.most_similar(positive=['woman', 'king'], negative=['man']))
     
 def trainWord2VecModel(input, modelname):
     print("Starting word2vec training")
@@ -30,7 +30,7 @@ def trainWord2VecModel(input, modelname):
     model.save(modelname)
     
 # find most similar n words to given word
-def applyWord2VecMostSimilar(modelname = "./models/GoogleNews-vectors-negative300.bin", word, top=10, pretrained = True):
+def applyWord2VecMostSimilar(modelname = "./models/GoogleNews-vectors-negative300.bin", word = "man", top = 10, pretrained = True):
     model = None
     if pretrained == True:
         model = KeyedVectors.load_word2vec_format("./models/GoogleNews-vectors-negative300.bin", binary = True) 
@@ -53,7 +53,7 @@ def main():
         inputModel.append(headline_body_pairs[i][1])
     
     trainWord2VecModel(inputModel, "./models/testmodel")
-    applyWord2VecModel("./models/GoogleNews-vectors-negative300.bin", "man", 10, True)
+    applyWord2VecMostSimilar("./models/GoogleNews-vectors-negative300.bin", "man", 10, True)
             
 if __name__ == '__main__':
     main()
