@@ -13,12 +13,12 @@ def loadWord2VecOnGoogleDataset():
 # converting Stanford's GloVe 840b 300d file format to word2vec file format
 def convertGloveToWord2Vec():
     glove_input_file = "./models/glove.840b.300d.txt"
-    word2vec_output_file = "./models/glove.840b.300d.txt.word2vec"
+    word2vec_output_file = "./models/glove.840b.300d.word2vec.txt"
     glove2word2vec(glove_input_file, word2vec_output_file)
     
 # load Stanford's 840b 300d pre-trained model      
 def loadWord2VecConvertedFromGlove():
-    model = KeyedVectors.load_word2vec_format("./models/glove.840b.300d.txt.word2vec", binary = True)
+    model = KeyedVectors.load_word2vec_format("./models/glove.840b.300d.txt.word2vec.txt")
     result = model.most_similar(positive=['woman', 'king'], negative=['man'], topn=1)
     print(result)
     return model
