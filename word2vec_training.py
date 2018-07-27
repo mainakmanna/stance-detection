@@ -18,7 +18,7 @@ def convertGloveToWord2Vec():
     
 # load Stanford's 840b 300d pre-trained model      
 def loadWord2VecConvertedFromGlove():
-    model = KeyedVectors.load_word2vec_format("./models/glove.840b.300d.txt.word2vec.txt")
+    model = KeyedVectors.load_word2vec_format("./models/glove.840b.300d.word2vec.txt")
     result = model.most_similar(positive=['woman', 'king'], negative=['man'], topn=1)
     print(result)
     return model
