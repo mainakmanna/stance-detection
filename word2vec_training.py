@@ -1,11 +1,29 @@
 import logging
 from gensim.models import word2vec, KeyedVectors
+from gensim.scripts.glove2word2vec import glove2word2vec
 from preprocess import processDataset
 
+# load Google's pre-trained word2vec model 
 def loadWord2VecOnGoogleDataset():
     model = KeyedVectors.load_word2vec_format("./models/GoogleNews-vectors-negative300.bin", binary = True)
-    #print(model.most_similar(positive=['woman', 'king'], negative=['man']))
+    result = model.most_similar(positive=['woman', 'king'], negative=['man'], topn=1)
+    print(result)
+    return model
+
+# converting Stanford's GloVe 840b 300d file format to word2vec file format
+def convertGloveToWord2Vec():
+    glove_input_file = "./models/glove.840b.300d.txt"
+    word2vec_output_file = "./models/glove.840b.300d.txt.word2vec"
+    glove2word2vec(glove_input_file, word2vec_output_file)
     
+# load Stanford's 840b 300d pre-trained model      
+def loadWord2VecConvertedFromGlove():
+    model = KeyedVectors.load_word2vec_format("./models/glove.840b.300d.txt.word2vec", binary = True)
+    result = model.most_similar(positive=['woman', 'king'], negative=['man'], topn=1)
+    print(result)
+    return model
+
+# train and save a word2vec model
 def trainWord2VecModel(input, modelname):
     print("Starting word2vec training")
     logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', level = logging.INFO)
@@ -44,8 +62,9 @@ def applyWord2VecMostSimilar(modelname = "./models/GoogleNews-vectors-negative30
     for v in model.vocab:
         if word in v:
             print(v)
-            
-def main():
+
+# train a word2vec model on the FNC dataset
+def trainWord2VecOnFNCDataset():
     headline_body_pairs = processDataset("all")[0]
     inputModel = []
     for i in range(0, len(headline_body_pairs)):
@@ -53,7 +72,3 @@ def main():
         inputModel.append(headline_body_pairs[i][1])
     
     trainWord2VecModel(inputModel, "./models/testmodel")
-    applyWord2VecMostSimilar("./models/GoogleNews-vectors-negative300.bin", "man", 10, True)
-            
-if __name__ == '__main__':
-    main()
