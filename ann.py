@@ -1,5 +1,9 @@
 import numpy as np
 from sklearn.preprocessing import LabelEncoder, OneHotEncoder
+from sklearn.model_selection import train_test_split, cross_val_score
+from keras.models import Sequential
+from keras.layers import Dense, Dropout
+from keras.wrappers.scikit_learn import KerasClassifier
 from word2vec_training import loadWord2VecConvertedFromGlove, loadWord2VecOnGoogleDataset
 from preprocess import processDataset
 
@@ -45,3 +49,26 @@ def prepareDataset():
         headline_body_pairs_vec[i] = np.concatenate((headline_vec_mean, body_vec_mean), axis = 0)
         
     return headline_body_pairs_vec, stances_onehotencoded
+
+# Split dataset into train and dev sets
+def splitDataset():
+    X, y = prepareDataset()
+    X_train, X_dev, y_train, y_dev = train_test_split(X,y, test_size = 0.2, random_state = 0)
+    return X_train, X_dev, y_train, y_dev
+
+def buildClassifier():
+    classifier = Sequential()
+    classifier.add(Dense(units = 128, kernel_initializer = "uniform", activation = "relu", input_dim = 300))
+    classifier.add(Dropout(rate = 0.2))
+    classifier.add(Dense(units = 128, kernel_initializer = "uniform", activation = "relu"))
+    classifier.add(Dropout(rate = 0.2))
+    classifier.add(Dense(units = 4, kernel_initializer = "uniform", activation = "softmax"))
+    classifier.compile(optimizer = "adam", loss = "binary_crossentropy", metrics = ["accuracy"])
+    return classifier
+
+def runClassifier():
+    X_train, X_dev, y_train, y_dev = splitDataset()
+    classifier = KerasClassifier(build_fn = buildClassifier, batch_size = 32, epochs = 10)
+    accuracies = cross_val_score(estimator = classifier, X = X_train, y = y_train, cv = 10, n_jobs = 1)
+    mean = accuracies.mean()
+    variance = accuracies.std()
