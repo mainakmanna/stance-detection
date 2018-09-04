@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import tensorflow as tf
 import numpy as np
 import nltk.data
@@ -25,7 +23,7 @@ m_max = 80
 tf.reset_default_graph()
 
 """
-Creates an Dynamic RNN with a lstmunit as it's shell. 
+Creates an Dynamic RNN with a lstmunit as it's cell. 
 """
 
 
@@ -38,7 +36,7 @@ def lstmEncoder1(input_to_encoder, lstmunits):
 
 # Tensorflow Graph
 
-# Input to the lstm encoder. 300 because of wordvectors size (gensim).
+# Input to the lstm encoder. 300 because of wordvectors size (gensim word2vec).
 input_to_encoder = tf.placeholder(shape=(None, None, 300), dtype=tf.float64, name='input_to_encoder');
 
 # Model to get encoding
@@ -151,7 +149,7 @@ def prepare_dataset():
         # concatenating the headline and body vectors
         headline_body_pairs_vec[i] = np.array(np.concatenate((zeropadded_headline_vec, zeropadded_body_vec), axis=0))
 
-    # headline_body_pairs_vec = np.array(headline_body_pairs_vec)
+    print('Headline body pairs formed.')
     del headline_body_pairs
     del stances
     del word2vec_model
@@ -193,17 +191,9 @@ def train(session, X_train_head, X_train_body, y_train):
 def cross_validate(session, X_train_head, X_dev_head, X_train_body, X_dev_body, y_train, y_dev):
     results = []
     kf = KFold(n_splits=split_size)
-    # for train_idx, val_idx in kf.split(X_train, y_train):
-    #     train_x = X_train[train_idx]
-    #     train_y = y_train[train_idx]
-    #     val_x = X_train[val_idx]
-    #     val_y = y_train[val_idx]
-    #     train(session, train_x, train_y)
-    #     results.append(session.run(accuracy, feed_dict={x: val_x, y: val_y}))
-    # test_accuracy = session.run(accuracy, feed_dict={x: X_dev, y: y_dev})
-    # return results, test_accuracy
+    print('Cross validation .')
     for train_idx, val_idx in kf.split(X_train_head, X_train_body, y_train):
-        # Trainin parts
+        # Training part
         train_x_head = X_train_head[train_idx]
         train_x_body = X_train_body[train_idx]
         train_y = y_train[train_idx]
@@ -236,16 +226,17 @@ def main():
 
         session.run(init)
 
-        ppx = session.run([encoded_variables], feed_dict={input_to_encoder: np.array(headlines)})
-        outputs = ppx[0][0]
+        state_op_pair = session.run([encoded_variables], feed_dict={input_to_encoder: np.array(headlines)})
+        outputs = state_op_pair[0][0]
+        # transposing to get the output in the form [max_time, batch_size, cell.output_size]
         outputs = np.transpose(outputs, (1, 0, 2))
         encodedd_op_batch_headlines = outputs[-1]
         del headlines
         del outputs
         gc.collect()
-        # print(bodies.shape)
-        ppx = session.run([encoded_variables], feed_dict={input_to_encoder: np.array(bodies)});
-        outputs = ppx[0][0]
+        
+        state_op_pair = session.run([encoded_variables], feed_dict={input_to_encoder: np.array(bodies)});
+        outputs = state_op_pair[0][0]
         outputs = np.transpose(outputs, (1, 0, 2))
         encodedd_op_batch_bodies = outputs[-1]
         del bodies
@@ -260,4 +251,5 @@ def main():
                                                y_dev)
         print("\n")
         print("Cross-validation result: ", result)
+        print("Training Accuracy: ",np.mean(np.array(result)))
         print("Test accuracy: ", test_accuracy)
