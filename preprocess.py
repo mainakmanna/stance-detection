@@ -19,6 +19,28 @@ def loadDataset():
     
     return headline_body_pairs, stances
     
+def loadDatasetGen():
+    csv_file_path = "./dataset/train_stances.csv"
+    c_size = 10000
+    for dataset_stances in pd.read_csv(csv_file_path,chunksize=c_size):
+        dataset_bodies = pd.read_csv("./dataset/train_bodies.csv")
+        #dataset_stances = pd.read_csv("./dataset/train_stances.csv")
+    
+        # Forming dictionary of Body Id ---> Body.
+        bodies_dict = dict(zip(dataset_bodies['Body ID'], dataset_bodies['articleBody']))
+    
+        # Takes the headline and body Id
+        headline_body_pairs = dataset_stances.iloc[:, 0:2].values
+        
+        for index in range(0, len(headline_body_pairs)):
+            # replacing body id with actual body
+            headline_body_pairs[index,1] = bodies_dict.get(headline_body_pairs[index,1])
+    
+        # array that holds individual stances for each headline-body pair
+        stances = dataset_stances.iloc[:, 2]
+    
+        yield headline_body_pairs, stances
+        
 def filterStopwords(tokenized_doc, filter = "all"):
     if filter == "all":
         stops = stopwords.words("english")
