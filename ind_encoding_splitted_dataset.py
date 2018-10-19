@@ -20,6 +20,9 @@ split_size = 10
 n_max = 20
 m_max = 80
 
+# Location where model will be saved.
+model_path = "/tmp/model.ckpt" 
+
 tf.reset_default_graph()
 
 """
@@ -45,6 +48,9 @@ encoded_variables = lstmEncoder1(input_to_encoder, hidden_nodes)
 x_head = tf.placeholder(shape=([None, hidden_nodes]), dtype=tf.float64, name='x_head')
 x_body = tf.placeholder(shape=([None, hidden_nodes]), dtype=tf.float64, name='x_body')
 y = tf.placeholder(shape=[None, 4], dtype=tf.float64, name='y')
+
+# 'Saver' op to save and restore all the variables
+saver = tf.train.Saver()
 
 # Weights
 weights = {
@@ -206,7 +212,7 @@ def cross_validate(session, X_train_head, X_dev_head, X_train_body, X_dev_body, 
 
 
 def main():
-
+	iter = 0
     with tf.Session() as session:
         for x, y in prepare_dataset():
         
@@ -220,7 +226,11 @@ def main():
             config.gpu_options.allow_growth = True
     
             session.run(init)
-    
+    		
+    		# Skipping the first iteration
+    		if iter != 0:
+                saver.restore(session, model_path)
+
             state_op_pair = session.run([encoded_variables], feed_dict={input_to_encoder: np.array(headlines)})
             outputs = state_op_pair[0][0]
             # transposing to get the output in the form [max_time, batch_size, cell.output_size]
@@ -244,3 +254,9 @@ def main():
             print("Cross-validation result: ", result)
             print("Training Accuracy: ",np.mean(np.array(result)))
             print("Test accuracy: ", test_accuracy)
+            
+            # Saving the model.
+            save_path = saver.save(session, model_path)
+            print("Model saved in file: %s" % save_path)
+            
+            iter= iter+1
