@@ -31,11 +31,27 @@ Creates an Dynamic RNN with a lstmunit as it's cell.
 
 
 def lstmEncoder1(input_to_encoder, lstmunits):
-    lstm_cell1 = rnn.BasicLSTMCell(lstmunits)
-    return tf.nn.dynamic_rnn(cell=lstm_cell1,
-                             dtype=tf.float64,
-                             inputs=input_to_encoder)
+    with tf.variable_scope('lstm'):
+        lstm_cell =  rnn.BasicLSTMCell(lstmunits)
+        return tf.nn.bidirectional_dynamic_rnn(
+            cell_fw=lstm_cell,
+            cell_bw=lstm_cell,
+            dtype=tf.float64,
+            inputs=input_to_encoder)
 
+
+def encode_body( input_to_encoder,lstmunit,ini_state_fw, ini_state_bw):
+    #input_to_encoder = tf.placeholder(shape = (None, None,300), dtype=tf.float64, name='input_to_encoder');
+    with tf.variable_scope('lstm1'):
+        
+        lstm_cell1 =  rnn.BasicLSTMCell(lstmunit)
+        return tf.nn.bidirectional_dynamic_rnn(
+                            cell_fw=lstm_cell1,
+                            cell_bw=lstm_cell1,
+                            dtype=tf.float64,    
+                            inputs=input_to_encoder,
+                            initial_state_fw = ini_state_fw,
+                            initial_state_bw = ini_state_bw)
 
 # Tensorflow Graph
 
@@ -44,6 +60,21 @@ input_to_encoder = tf.placeholder(shape=(None, None, 300), dtype=tf.float64, nam
 
 # Model to get encoding
 encoded_variables = lstmEncoder1(input_to_encoder, hidden_nodes)
+
+# Encoding the body
+
+# initial state for the forward pass
+initial_c_fw=tf.placeholder(tf.float64, [None, 128],name='initial_c_fw')
+initial_h_fw=tf.placeholder(tf.float64, [None, 128],name='initial_h_fw')
+initial_state_fw = rnn.LSTMStateTuple(c=initial_c_fw, h=initial_h_fw)
+
+# initial state for the backward pass
+initial_c_bw = tf.placeholder(tf.float64, [None, 128], name='initial_c_bw')
+initial_h_bw = tf.placeholder(tf.float64, [None, 128], name='initial_h_bw')
+initial_state_bw = rnn.LSTMStateTuple(c=initial_c_bw, h=initial_h_bw)
+
+encoded_bodies = encode_body(input_to_encoder,128,initial_state_fw, initial_state_bw)
+    
 # Inputs and correct outputs
 x_head = tf.placeholder(shape=([None, hidden_nodes]), dtype=tf.float64, name='x_head')
 x_body = tf.placeholder(shape=([None, hidden_nodes]), dtype=tf.float64, name='x_body')
@@ -110,8 +141,7 @@ def prepare_dataset():
     print("Finished loading word2vec model.")
 
     print("Getting dataset...")
-    for headline_body_pairs, stances in loadDatasetGen():
-            
+    for headline_body_pairs, stances in loadDatasetGen():    
         print("Finished getting dataset.")
     
         stance_labelencoder = LabelEncoder()
@@ -157,7 +187,10 @@ def prepare_dataset():
             headline_body_pairs_vec[i] = np.array(np.concatenate((zeropadded_headline_vec, zeropadded_body_vec), axis=0))
     
         print('Headline body pairs formed.')
-        
+        #del headline_body_pairs
+        #del stances
+        #del word2vec_model
+        #gc.collect()
         yield headline_body_pairs_vec, stances_onehotencoded
 
 
@@ -167,7 +200,7 @@ def split_dataset(x, y, z):
 
 
 def train(session, X_train_head, X_train_body, y_train):
-    #print("\n")
+    print("\n")
     total_batch = int(math.ceil(len(X_train_head) / batch_size))
     for epoch in range(epochs):
         avg_cost = 0
@@ -189,7 +222,7 @@ def train(session, X_train_head, X_train_body, y_train):
                 end += batch_size
         avg_cost = avg_cost / total_batch
         train_accuracy = session.run(accuracy, feed_dict={x_head: X_train_head, x_body: X_train_body, y: y_train})
-        #print("Epoch:", (epoch + 1), "cost =", "{:.3f}".format(avg_cost), "accuracy =", "{:.3f}".format(train_accuracy))
+        print("Epoch:", (epoch + 1), "cost =", "{:.3f}".format(avg_cost), "accuracy =", "{:.3f}".format(train_accuracy))
 
 
 def cross_validate(session, X_train_head, X_dev_head, X_train_body, X_dev_body, y_train, y_dev):
@@ -214,39 +247,67 @@ def cross_validate(session, X_train_head, X_dev_head, X_train_body, X_dev_body, 
 def main():
     iter = 0
     with tf.Session() as session:
+        
         for x, y in prepare_dataset():
+                
         
             # Now process x
             # Input shape: x ---> (training samples, n_max+m_max, 300)
         
             headlines = x[:, :n_max, :]
             bodies = x[:, n_max:, :]
+        
+            del x
+            gc.collect()
+        
             # Configure GPU not to use all memory
             config = tf.ConfigProto()
             config.gpu_options.allow_growth = True
     
             session.run(init)
-    		
-    		# Skipping the first iteration
-    		if iter != 0:
-				saver.restore(session, model_path)
-
-            state_op_pair = session.run([encoded_variables], feed_dict={input_to_encoder: np.array(headlines)})
-            outputs = state_op_pair[0][0]
-            # transposing to get the output in the form [max_time, batch_size, cell.output_size]
-            outputs = np.transpose(outputs, (1, 0, 2))
-            encodedd_op_batch_headlines = outputs[-1]
+            if iter != 0:
+                saver.restore(session, model_path)
+            outputs = session.run([encoded_variables], feed_dict={input_to_encoder: np.array(headlines)})
             
-            
-            state_op_pair = session.run([encoded_variables], feed_dict={input_to_encoder: np.array(bodies)});
-            outputs = state_op_pair[0][0]
-            outputs = np.transpose(outputs, (1, 0, 2))
-            encodedd_op_batch_bodies = outputs[-1]
+            output_fw, output_bw = outputs[0][0]
+            states_fw, states_bw = outputs[0][1]
+        
+            state_c_fw = []
+            state_c_bw = []
+            state_h_fw = []
+            state_h_bw = []
+    
+            for i in range(states_fw[0].shape[0]):
+                state_c_fw.append(states_fw.c[i])
+                state_h_fw.append(states_fw.h[i])
+                state_c_bw.append(states_bw.c[i])
+                state_h_bw.append(states_bw.h[i])
             
     
+            del headlines
+            del outputs
+            gc.collect()
+    
+            outputs = session.run([encoded_bodies], feed_dict={input_to_encoder: np.array(bodies)
+                                                        , initial_c_fw:np.array(state_c_fw)
+                                                        , initial_c_bw:np.array(state_c_bw)
+                                                        , initial_h_fw:np.array(state_h_fw)
+                                                        , initial_h_bw:np.array(state_h_bw)});
+            # outputs  = ppx[0][0]
+            output_fw, output_bw = outputs[0][0]
+            states_fw, states_bw = outputs[0][1]
+            output_fw = np.transpose(output_fw, (1,0,2))
+            output_bw = np.transpose(output_bw, (1,0,2))
+    
+            encodedd_op_batch_bodies1 = output_fw[-1]
+            encodedd_op_batch_bodies2 = output_bw[-1]
+            del bodies
+            del outputs
+            gc.collect()
+    
             # At this encodedd_op_batch_XXX contains inputs
-            X_train_head, X_dev_head, X_train_body, X_dev_body, y_train, y_dev = split_dataset(encodedd_op_batch_headlines,
-                                                                                               encodedd_op_batch_bodies, y)
+            X_train_head, X_dev_head, X_train_body, X_dev_body, y_train, y_dev = split_dataset(encodedd_op_batch_bodies1,
+                                                                                               encodedd_op_batch_bodies2, y)
             # train(session, X_train, y_train)
             result, test_accuracy = cross_validate(session, X_train_head, X_dev_head, X_train_body, X_dev_body, y_train,
                                                    y_dev)
@@ -254,7 +315,6 @@ def main():
             print("Cross-validation result: ", result)
             print("Training Accuracy: ",np.mean(np.array(result)))
             print("Test accuracy: ", test_accuracy)
-            
             # Saving the model.
             save_path = saver.save(session, model_path)
             print("Model saved in file: %s" % save_path)
