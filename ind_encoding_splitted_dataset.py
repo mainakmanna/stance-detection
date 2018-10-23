@@ -212,7 +212,7 @@ def cross_validate(session, X_train_head, X_dev_head, X_train_body, X_dev_body, 
 
 
 def main():
-	iter = 0
+    iter = 0
     with tf.Session() as session:
         for x, y in prepare_dataset():
         
@@ -229,7 +229,7 @@ def main():
     		
     		# Skipping the first iteration
     		if iter != 0:
-                saver.restore(session, model_path)
+				saver.restore(session, model_path)
 
             state_op_pair = session.run([encoded_variables], feed_dict={input_to_encoder: np.array(headlines)})
             outputs = state_op_pair[0][0]
