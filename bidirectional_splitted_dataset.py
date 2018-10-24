@@ -21,7 +21,7 @@ n_max = 20
 m_max = 80
 
 # Location where model will be saved.
-model_path = "/tmp/model.ckpt" 
+model_path = "./models/independent_encoding.ckpt" 
 
 tf.reset_default_graph()
 

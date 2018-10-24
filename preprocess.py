@@ -4,8 +4,8 @@ from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
 
 def loadDataset():
-    dataset_bodies = pd.read_csv("../dataset/train_bodies.csv")
-    dataset_stances = pd.read_csv("../dataset/train_stances.csv")
+    dataset_bodies = pd.read_csv("./dataset/train_bodies.csv")
+    dataset_stances = pd.read_csv("./dataset/train_stances.csv")
     
     bodies_dict = dict(zip(dataset_bodies['Body ID'], dataset_bodies['articleBody']))
     headline_body_pairs = dataset_stances.iloc[:, 0:2].values
@@ -18,6 +18,19 @@ def loadDataset():
     stances = dataset_stances.iloc[:, 2]
     
     return headline_body_pairs, stances
+
+def loadTestDataset():
+    dataset_bodies = pd.read_csv("./dataset/comopetition_test_bodies.csv")
+    dataset_stances = pd.read_csv("./dataset/competition_test_stances_unlabebled.csv")
+    
+    bodies_dict = dict(zip(dataset_bodies['Body ID'], dataset_bodies['articleBody']))
+    headline_body_pairs = dataset_stances.iloc[:, 0:2].values
+    
+    for index in range(0, len(headline_body_pairs)):
+        # replacing body id with actual body
+        headline_body_pairs[index,1] = bodies_dict.get(headline_body_pairs[index,1])
+    
+    return headline_body_pairs
     
 def loadDatasetGen():
     csv_file_path = "./dataset/train_stances.csv"

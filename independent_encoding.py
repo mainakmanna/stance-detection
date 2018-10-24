@@ -8,7 +8,6 @@ from sklearn.preprocessing import LabelEncoder, OneHotEncoder
 from sklearn.model_selection import train_test_split, KFold
 from preprocess import loadDataset
 from word2vec_training import loadWord2VecConvertedFromGlove, loadWord2VecOnGoogleDataset
-from tensorflow.contrib import rnn
 
 # Parameters
 learning_rate = 0.001
@@ -17,31 +16,31 @@ batch_size = 32
 hidden_nodes = 128
 dropout = 0.2
 split_size = 10
-n_max = 20
-m_max = 80
+head_max = 20
+body_max = 80
+
+# Model path
+model_path = "./models/independent_encoding.ckpt"
 
 tf.reset_default_graph()
 
 """
-Creates an Dynamic RNN with a lstmunit as it's cell. 
+Create a Dynamic RNN with a LSTMCell as it's cell. 
 """
 
-
-def lstmEncoder1(input_to_encoder, lstmunits):
-    lstm_cell1 = rnn.BasicLSTMCell(lstmunits)
-    return tf.nn.dynamic_rnn(cell=lstm_cell1,
-                             dtype=tf.float64,
-                             inputs=input_to_encoder)
-
+def lstm_encoder(input_to_encoder, lstm_units):
+    lstm_cell = tf.nn.rnn_cell.LSTMCell(lstm_units, name="basic_lstm_cell")
+    return tf.nn.dynamic_rnn(cell=lstm_cell, dtype=tf.float64, inputs=input_to_encoder)
 
 # Tensorflow Graph
 
 # Input to the lstm encoder. 300 because of wordvectors size (gensim word2vec).
 input_to_encoder = tf.placeholder(shape=(None, None, 300), dtype=tf.float64, name='input_to_encoder');
 
-# Model to get encoding
-encoded_variables = lstmEncoder1(input_to_encoder, hidden_nodes)
-# Inputs and correct outputs
+# Model to get the encoding of the headline + body input
+encoded_variables = lstm_encoder(input_to_encoder, hidden_nodes)
+
+# Input and output placeholders
 x_head = tf.placeholder(shape=([None, hidden_nodes]), dtype=tf.float64, name='x_head')
 x_body = tf.placeholder(shape=([None, hidden_nodes]), dtype=tf.float64, name='x_body')
 y = tf.placeholder(shape=[None, 4], dtype=tf.float64, name='y')
@@ -65,12 +64,14 @@ biases = {
                           dtype=tf.float64, initializer=tf.constant_initializer(0))
 }
 
+# 'Saver' op to save and restore all the variables
+saver = tf.train.Saver()
 
 # Feedforward neural network model
 def forward_propagation(X_head, X_body):
     hidden_layer_head = tf.matmul(X_head, weights['W_head'])
     hidden_layer_body = tf.matmul(X_body, weights['W_body'])
-    hidden_layer = hidden_layer_head + hidden_layer_body
+    hidden_layer = hidden_layer_head + hidden_layer_body + biases['b1']
     hidden_layer = tf.nn.relu(hidden_layer)
     hidden_layer_dropout = tf.nn.dropout(hidden_layer, keep_prob=(1 - dropout))
     out_layer = tf.matmul(hidden_layer_dropout, weights['W2']) + biases['b2']
@@ -91,7 +92,6 @@ accuracy = tf.reduce_mean(tf.cast(correct_predicton, tf.float64))
 
 # Initializing the variables
 init = tf.global_variables_initializer()
-
 
 def clean(s):
     return " ".join(re.findall(r'\w+', s, flags=re.UNICODE)).lower()
@@ -134,16 +134,16 @@ def prepare_dataset():
         body_vec = np.array(
             [np.array(word2vec_model[word]) if word in word2vec_model.vocab else np.zeros((300,)) for word in body])
 
-        # Limiting the length upto n_max and m_max respectively.
-        headline_vec = headline_vec[:n_max]
-        body_vec = body_vec[:m_max]
+        # Limiting the length upto head_max and body_max respectively.
+        headline_vec = headline_vec[:head_max]
+        body_vec = body_vec[:body_max]
 
-        # Zero padding for headline
-        zeropadded_headline_vec = np.zeros((n_max, len(headline_vec[0])))
+        # zero padding for headline
+        zeropadded_headline_vec = np.zeros((head_max, len(headline_vec[0])))
         zeropadded_headline_vec[:headline_vec.shape[0], :headline_vec.shape[1]] = headline_vec
 
         # zero padding for body
-        zeropadded_body_vec = np.zeros((m_max, len(body_vec[0])))
+        zeropadded_body_vec = np.zeros((body_max, len(body_vec[0])))
         zeropadded_body_vec[:body_vec.shape[0], :body_vec.shape[1]] = body_vec
 
         # concatenating the headline and body vectors
@@ -157,9 +157,9 @@ def prepare_dataset():
     return headline_body_pairs_vec, stances_onehotencoded
 
 
-def split_dataset(x, y, z):
-    X_train, X_dev, Y_train, Y_dev, z_train, z_dev = train_test_split(x, y, z, test_size=0.1, random_state=42)
-    return X_train, X_dev, Y_train, Y_dev, z_train, z_dev
+def split_dataset(x_head, x_body, y):
+    X_head_train, X_head_dev, X_body_train, X_body_dev, Y_train, Y_dev = train_test_split(x_head, x_body, y, test_size=0.1, random_state=42)
+    return X_head_train, X_head_dev, X_body_train, X_body_dev, Y_train, Y_dev
 
 
 def train(session, X_train_head, X_train_body, y_train):
@@ -177,10 +177,10 @@ def train(session, X_train_head, X_train_body, y_train):
             _, loss = session.run([optimizer, cost], feed_dict={x_head: batch_x_head, x_body: batch_x_body, y: batch_y})
             avg_cost += loss
             start += batch_size
-            # if it is last batch then the (end) will be the length of the X_train
-            # else shift by batch size.
+            # if it is last batch then the (end) will be the length of X_train
             if i == total_batch - 2:
                 end = len(X_train_head)
+            # else shift by batch size.
             else:
                 end += batch_size
         avg_cost = avg_cost / total_batch
@@ -193,34 +193,34 @@ def cross_validate(session, X_train_head, X_dev_head, X_train_body, X_dev_body, 
     kf = KFold(n_splits=split_size)
     print('Cross validation .')
     for train_idx, val_idx in kf.split(X_train_head, X_train_body, y_train):
-        # Training part
+        # training inputs
         train_x_head = X_train_head[train_idx]
         train_x_body = X_train_body[train_idx]
         train_y = y_train[train_idx]
-        # Validation part
+        # validation inputs
         val_x_head = X_train_head[val_idx]
         val_x_body = X_train_body[val_idx]
         val_y = y_train[val_idx]
         train(session, train_x_head, train_x_body, train_y)
         results.append(session.run(accuracy, feed_dict={x_head: val_x_head, x_body: val_x_body, y: val_y}))
-    test_accuracy = session.run(accuracy, feed_dict={x_head: X_dev_head, x_body: X_dev_body, y: y_dev})
-    return results, test_accuracy
+    test_accuracy, predictions = session.run([accuracy, y_hat], feed_dict={x_head: X_dev_head, x_body: X_dev_body, y: y_dev})
+    return results, test_accuracy, predictions
 
 
 def main():
     x, y = prepare_dataset()
 
     # Now process x
-    # Input shape: x ---> (training samples, n_max+m_max, 300)
+    # Input shape: x ---> (training samples, head_max+body_max, 300)
 
-    headlines = x[:, :n_max, :]
-    bodies = x[:, n_max:, :]
+    headlines = x[:, :head_max, :]
+    bodies = x[:, head_max:, :]
 
     del x
     gc.collect()
 
     with tf.Session() as session:
-        # Configure GPU not to use all memory
+        # configure GPU not to use all memory
         config = tf.ConfigProto()
         config.gpu_options.allow_growth = True
 
@@ -230,7 +230,7 @@ def main():
         outputs = state_op_pair[0][0]
         # transposing to get the output in the form [max_time, batch_size, cell.output_size]
         outputs = np.transpose(outputs, (1, 0, 2))
-        encodedd_op_batch_headlines = outputs[-1]
+        encoded_op_batch_headlines = outputs[-1]
         del headlines
         del outputs
         gc.collect()
@@ -238,18 +238,19 @@ def main():
         state_op_pair = session.run([encoded_variables], feed_dict={input_to_encoder: np.array(bodies)});
         outputs = state_op_pair[0][0]
         outputs = np.transpose(outputs, (1, 0, 2))
-        encodedd_op_batch_bodies = outputs[-1]
+        encoded_op_batch_bodies = outputs[-1]
         del bodies
         del outputs
         gc.collect()
 
-        # At this encodedd_op_batch_XXX contains inputs
-        X_train_head, X_dev_head, X_train_body, X_dev_body, y_train, y_dev = split_dataset(encodedd_op_batch_headlines,
-                                                                                           encodedd_op_batch_bodies, y)
-        # train(session, X_train, y_train)
-        result, test_accuracy = cross_validate(session, X_train_head, X_dev_head, X_train_body, X_dev_body, y_train,
+        X_train_head, X_dev_head, X_train_body, X_dev_body, y_train, y_dev = split_dataset(encoded_op_batch_headlines,
+                                                                                           encoded_op_batch_bodies, y)
+        
+        result, test_accuracy, predictions = cross_validate(session, X_train_head, X_dev_head, X_train_body, X_dev_body, y_train,
                                                y_dev)
         print("\n")
         print("Cross-validation result: ", result)
         print("Training Accuracy: ",np.mean(np.array(result)))
         print("Test accuracy: ", test_accuracy)
+        
+        saver.save(session, model_path)

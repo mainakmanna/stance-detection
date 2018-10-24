@@ -6,8 +6,8 @@ from preprocess import processDataset
 # load Google's pre-trained word2vec model 
 def loadWord2VecOnGoogleDataset():
     model = KeyedVectors.load_word2vec_format("./models/GoogleNews-vectors-negative300.bin", binary = True)
-    result = model.most_similar(positive=['woman', 'king'], negative=['man'], topn=1)
-    print(result)
+    #result = model.most_similar(positive=['woman', 'king'], negative=['man'], topn=1)
+    #print(result)
     return model
 
 # converting Stanford's GloVe 840b 300d file format to word2vec file format
@@ -19,8 +19,8 @@ def convertGloveToWord2Vec():
 # load Stanford's 840b 300d pre-trained model      
 def loadWord2VecConvertedFromGlove():
     model = KeyedVectors.load_word2vec_format("./models/glove.840b.300d.word2vec.txt")
-    result = model.most_similar(positive=['woman', 'king'], negative=['man'], topn=1)
-    print(result)
+    #result = model.most_similar(positive=['woman', 'king'], negative=['man'], topn=1)
+    #print(result)
     return model
 
 # train and save a word2vec model
