@@ -142,7 +142,7 @@ def train(session, X_train, y_train):
         train_accuracy = session.run(accuracy, feed_dict = {x: X_train, y: y_train})
         print("Epoch:", (epoch + 1), "cost =", "{:.3f}".format(avg_cost), "accuracy =", "{:.3f}".format(train_accuracy))
    
-def cross_validate(session, X_train, X_dev, y_train, y_dev):
+def cross_validate(session, X_train, X_dev, X_test, y_train, y_dev, y_test):
     results = []
     kf = KFold(n_splits = split_size)
     for train_idx, val_idx in kf.split(X_train, y_train):
@@ -152,15 +152,19 @@ def cross_validate(session, X_train, X_dev, y_train, y_dev):
         val_y = y_train[val_idx]
         train(session, train_x, train_y)
         results.append(session.run(accuracy, feed_dict={x: val_x, y: val_y}))
-    test_accuracy = session.run(accuracy, feed_dict={x: X_dev, y: y_dev})
-    return results, test_accuracy
+    dev_accuracy = session.run(accuracy, feed_dict={x: X_dev, y: y_dev})
+    test_accuracy = session.run(accuracy, feed_dict={x: X_test, y: y_test})
+    return results, dev_accuracy, test_accuracy
      
 def main():
-    x, y = prepare_dataset('./dataset/train_bodies1.csv','./dataset/train_stances1.csv')
-    X_train, X_dev, y_train, y_dev = split_dataset(x, y)
+    X_train, y_train = prepare_dataset('./dataset/train_bodies1.csv','./dataset/train_stances1.csv')
+    X_dev, y_dev = prepare_dataset('./dataset/dev_bodies1.csv','./dataset/dev_stances1.csv')
+    X_test, y_test = prepare_dataset('./dataset/competition_test_bodies.csv','./dataset/competition_test_stances.csv')
+    #X_train, X_dev, y_train, y_dev = split_dataset(x, y)
     with tf.Session() as session:
         #train(session, X_train, y_train)
-        result, test_accuracy = cross_validate(session, X_train, X_dev, y_train, y_dev)
+        result, dev_accuracy, test_accuracy = cross_validate(session, X_train, X_dev, X_test, y_train, y_dev, y_test)
         print("\n")
         print("Cross-validation result: ", result)
+        print("Dev accuracy: ", dev_accuracy)
         print("Test accuracy: ", test_accuracy)

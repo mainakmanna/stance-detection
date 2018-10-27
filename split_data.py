@@ -16,3 +16,10 @@ train_bodies_csv = training_bodies_final[['Body ID','articleBody']].copy()
 train_stances_csv = training_bodies_final[['Headline','Body ID','Stance']].copy()
 train_bodies_csv.to_csv('./dataset/train_bodies1.csv', index=False)
 train_stances_csv.to_csv('./dataset/train_stances1.csv', index=False)
+
+dev_bodies = pd.read_csv("./splits/hold_out_ids.csv")
+dev_bodies_final = merged.loc[merged['Body ID'].isin(dev_bodies['Body ID'])]
+dev_bodies_csv = dev_bodies_final[['Body ID','articleBody']].copy()
+dev_stances_csv = dev_bodies_final[['Headline','Body ID','Stance']].copy()
+dev_bodies_csv.to_csv('./dataset/dev_bodies1.csv', index=False)
+dev_stances_csv.to_csv('./dataset/dev_stances1.csv', index=False)
