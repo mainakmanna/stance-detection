@@ -64,14 +64,14 @@ init = tf.global_variables_initializer()
 def clean(s):
     return " ".join(re.findall(r'\w+', s, flags = re.UNICODE)).lower()
 
-def prepare_dataset():
+def prepare_dataset(bodiesfile, stancesfile):
     print("Loading word2vec model...")
     #word2vec_model = loadWord2VecConvertedFromGlove()
     word2vec_model = loadWord2VecOnGoogleDataset()
     print("Finished loading word2vec model.")
     
     print("Getting dataset...")
-    headline_body_pairs, stances = loadDataset();
+    headline_body_pairs, stances = loadDataset(bodiesfile, stancesfile);
     print("Finished getting dataset.")
     
     stance_labelencoder = LabelEncoder()
@@ -156,7 +156,7 @@ def cross_validate(session, X_train, X_dev, y_train, y_dev):
     return results, test_accuracy
      
 def main():
-    x, y = prepare_dataset()
+    x, y = prepare_dataset('./dataset/train_bodies1.csv','./dataset/train_stances1.csv')
     X_train, X_dev, y_train, y_dev = split_dataset(x, y)
     with tf.Session() as session:
         #train(session, X_train, y_train)
