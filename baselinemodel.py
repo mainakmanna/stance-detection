@@ -1,6 +1,7 @@
 import tensorflow as tf
 import numpy as np
 import nltk.data
+import pandas as pd
 import math
 import re
 from sklearn.preprocessing import LabelEncoder, OneHotEncoder
@@ -64,11 +65,15 @@ init = tf.global_variables_initializer()
 def clean(s):
     return " ".join(re.findall(r'\w+', s, flags = re.UNICODE)).lower()
 
+print("Loading word2vec model...")
+word2vec_model = loadWord2VecOnGoogleDataset()
+print("Finished loading word2vec model.")
+    
 def prepare_dataset(bodiesfile, stancesfile):
-    print("Loading word2vec model...")
+    #print("Loading word2vec model...")
     #word2vec_model = loadWord2VecConvertedFromGlove()
-    word2vec_model = loadWord2VecOnGoogleDataset()
-    print("Finished loading word2vec model.")
+    #word2vec_model = loadWord2VecOnGoogleDataset()
+    #print("Finished loading word2vec model.")
     
     print("Getting dataset...")
     headline_body_pairs, stances = loadDataset(bodiesfile, stancesfile);
@@ -155,7 +160,38 @@ def cross_validate(session, X_train, X_dev, X_test, y_train, y_dev, y_test):
     dev_accuracy = session.run(accuracy, feed_dict={x: X_dev, y: y_dev})
     test_accuracy = session.run(accuracy, feed_dict={x: X_test, y: y_test})
     return results, dev_accuracy, test_accuracy
-     
+
+def train_only(session, X_train, X_dev, X_test, y_train, y_dev, y_test):
+    # Configure GPU not to use all memory
+    config = tf.ConfigProto()
+    config.gpu_options.allow_growth = True
+        
+    session.run(init)
+    print("\n")
+    total_batch = int(math.ceil(len(X_train)/batch_size))
+    for epoch in range(epochs):
+        avg_cost = 0
+        loss = 0
+        start, end = 0, batch_size
+        for i in range(total_batch):
+            batch_x = X_train[start:end]
+            batch_y = y_train[start:end]
+            
+            _, loss = session.run([optimizer, cost], feed_dict = {x: batch_x, y: batch_y})
+            avg_cost += loss
+            start += batch_size
+            if i == total_batch - 2:
+                end = len(X_train)
+            else:
+                end += batch_size
+        avg_cost = avg_cost/total_batch
+        trainy_hat, train_accuracy = session.run([y_hat,accuracy], feed_dict = {x: X_train, y: y_train})
+        #trainy_hat = session.run( tf.Print(trainy_hat,[trainy_hat]))
+        #print(trainy_hat)
+        print("Epoch:", (epoch + 1), "cost =", "{:.3f}".format(avg_cost), "accuracy =", "{:.3f}".format(train_accuracy))
+    dev_predictions, dev_accuracy = session.run([y_hat,accuracy], feed_dict={x: X_dev, y: y_dev})
+    test_predictions, test_accuracy = session.run([y_hat, accuracy], feed_dict = {x: X_test, y: y_test})
+    return dev_accuracy, test_predictions, test_accuracy , dev_predictions    
 def main():
     X_train, y_train = prepare_dataset('./dataset/train_bodies1.csv','./dataset/train_stances1.csv')
     X_dev, y_dev = prepare_dataset('./dataset/dev_bodies1.csv','./dataset/dev_stances1.csv')
@@ -163,8 +199,38 @@ def main():
     #X_train, X_dev, y_train, y_dev = split_dataset(x, y)
     with tf.Session() as session:
         #train(session, X_train, y_train)
-        result, dev_accuracy, test_accuracy = cross_validate(session, X_train, X_dev, X_test, y_train, y_dev, y_test)
+        #result, dev_accuracy, test_accuracy = cross_validate(session, X_train, X_dev, X_test, y_train, y_dev, y_test)
+        dev_accuracy, test_predictions, test_accuracy, dev_predictions = train_only(session, X_train, X_dev, X_test, y_train, y_dev, y_test)
+        
+        test_preds = np.argmax(test_predictions, 1)
+        dev_preds  = np.argmax(dev_predictions , 1)
+        
+        stances = test_preds.astype(str)
+        stances_dev = dev_preds.astype(str)
+        
+        relation_map = {
+                0:'agree',
+                1:'disagree',
+                2:'discuss',
+                3:'unrelated',
+        }
+        for i in range(0, len(test_preds)):
+            stances[i]=relation_map[test_preds[i]]
+        for i in range(0, len(dev_preds)):
+            stances_dev[i]=relation_map[dev_preds[i]]
+        
+        df = pd.read_csv('./dataset/competition_test_stances.csv')
+        new_column = pd.DataFrame({'Stance': stances})
+        df['Stance']=new_column
+        
+        df1 = pd.read_csv('./dataset/dev_stances1.csv')
+        new_column_dev = pd.DataFrame({'Stance': stances_dev})
+        df1['Stance']=new_column_dev
+        
+        df.to_csv('testset_res.csv',index=False)
+        df1.to_csv('devset_res.csv',index=False)
+        
         print("\n")
-        print("Cross-validation result: ", result)
+        #print("Cross-validation result: ", result)
         print("Dev accuracy: ", dev_accuracy)
         print("Test accuracy: ", test_accuracy)
