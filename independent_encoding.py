@@ -11,7 +11,7 @@ from word2vec_training import loadWord2VecConvertedFromGlove, loadWord2VecOnGoog
 
 # Parameters
 learning_rate = 0.001
-epochs = 20
+epochs = 100
 batch_size = 32
 hidden_nodes = 128
 dropout = 0.2
@@ -96,15 +96,19 @@ init = tf.global_variables_initializer()
 def clean(s):
     return " ".join(re.findall(r'\w+', s, flags=re.UNICODE)).lower()
 
+print("Loading word2vec model...")
+# word2vec_model = loadWord2VecConvertedFromGlove()
+word2vec_model = loadWord2VecOnGoogleDataset()
+print("Finished loading word2vec model.")
 
-def prepare_dataset():
-    print("Loading word2vec model...")
+def prepare_dataset(bodiesfile, stancesfile):
+    #print("Loading word2vec model...")
     # word2vec_model = loadWord2VecConvertedFromGlove()
-    word2vec_model = loadWord2VecOnGoogleDataset()
-    print("Finished loading word2vec model.")
+    #word2vec_model = loadWord2VecOnGoogleDataset()
+    #print("Finished loading word2vec model.")
 
     print("Getting dataset...")
-    headline_body_pairs, stances = loadDataset();
+    headline_body_pairs, stances = loadDataset(bodiesfile, stancesfile);
     print("Finished getting dataset.")
 
     stance_labelencoder = LabelEncoder()
@@ -152,7 +156,7 @@ def prepare_dataset():
     print('Headline body pairs formed.')
     del headline_body_pairs
     del stances
-    del word2vec_model
+    #del word2vec_model
     gc.collect()
     return headline_body_pairs_vec, stances_onehotencoded
 
@@ -186,9 +190,36 @@ def train(session, X_train_head, X_train_body, y_train):
         avg_cost = avg_cost / total_batch
         train_accuracy = session.run(accuracy, feed_dict={x_head: X_train_head, x_body: X_train_body, y: y_train})
         print("Epoch:", (epoch + 1), "cost =", "{:.3f}".format(avg_cost), "accuracy =", "{:.3f}".format(train_accuracy))
+        
+def trainOnly(session, X_train_head, X_dev_head, X_test_head, X_train_body, X_dev_body, X_test_body, y_train, y_dev, y_test):
+    print("\n")
+    total_batch = int(math.ceil(len(X_train_head) / batch_size))
+    for epoch in range(epochs):
+        avg_cost = 0
+        loss = 0
+        start, end = 0, batch_size
+        for i in range(total_batch):
+            batch_x_head = X_train_head[start:end]
+            batch_x_body = X_train_body[start:end]
+            batch_y = y_train[start:end]
 
+            _, loss = session.run([optimizer, cost], feed_dict={x_head: batch_x_head, x_body: batch_x_body, y: batch_y})
+            avg_cost += loss
+            start += batch_size
+            # if it is last batch then the (end) will be the length of X_train
+            if i == total_batch - 2:
+                end = len(X_train_head)
+            # else shift by batch size.
+            else:
+                end += batch_size
+        avg_cost = avg_cost / total_batch
+        train_accuracy = session.run(accuracy, feed_dict={x_head: X_train_head, x_body: X_train_body, y: y_train})
+        print("Epoch:", (epoch + 1), "cost =", "{:.3f}".format(avg_cost), "accuracy =", "{:.3f}".format(train_accuracy))
+    dev_accuracy, dev_predictions = session.run([accuracy, y_hat], feed_dict={x_head: X_dev_head, x_body: X_dev_body, y: y_dev})
+    test_accuracy, test_predictions = session.run([accuracy, y_hat], feed_dict={x_head: X_test_head, x_body: X_test_body, y: y_test})
+    return dev_accuracy, dev_predictions, test_accuracy, test_predictions
 
-def cross_validate(session, X_train_head, X_dev_head, X_train_body, X_dev_body, y_train, y_dev):
+def cross_validate(session, X_train_head, X_dev_head, X_test_head, X_train_body, X_dev_body, X_test_body, y_train, y_dev, y_test):
     results = []
     kf = KFold(n_splits=split_size)
     print('Cross validation .')
@@ -203,20 +234,29 @@ def cross_validate(session, X_train_head, X_dev_head, X_train_body, X_dev_body, 
         val_y = y_train[val_idx]
         train(session, train_x_head, train_x_body, train_y)
         results.append(session.run(accuracy, feed_dict={x_head: val_x_head, x_body: val_x_body, y: val_y}))
-    test_accuracy, predictions = session.run([accuracy, y_hat], feed_dict={x_head: X_dev_head, x_body: X_dev_body, y: y_dev})
-    return results, test_accuracy, predictions
+    dev_accuracy, dev_predictions = session.run([accuracy, y_hat], feed_dict={x_head: X_dev_head, x_body: X_dev_body, y: y_dev})
+    test_accuracy, test_predictions = session.run([accuracy, y_hat], feed_dict={x_head: X_test_head, x_body: X_test_body, y: y_test})
+    return results, dev_accuracy, dev_predictions, test_accuracy, test_predictions
 
 
 def main():
-    x, y = prepare_dataset()
-
+    #x, y = prepare_dataset()
+    X_train, y_train = prepare_dataset('./dataset/train_bodies1.csv','./dataset/train_stances1.csv')
+    X_dev, y_dev = prepare_dataset('./dataset/dev_bodies1.csv','./dataset/dev_stances1.csv')
+    X_test, y_test = prepare_dataset('./dataset/competition_test_bodies.csv','./dataset/competition_test_stances.csv')
     # Now process x
     # Input shape: x ---> (training samples, head_max+body_max, 300)
 
-    headlines = x[:, :head_max, :]
-    bodies = x[:, head_max:, :]
+    headlines_train = X_train[:, :head_max, :]
+    bodies_train = X_train[:, head_max:, :]
+    headlines_dev = X_dev[:, :head_max, :]
+    bodies_dev = X_dev[:, head_max:, :]
+    headlines_test = X_test[:, :head_max, :]
+    bodies_test = X_test[:, head_max:, :]
 
-    del x
+    del X_train
+    del X_dev
+    del X_test
     gc.collect()
 
     with tf.Session() as session:
@@ -225,32 +265,74 @@ def main():
         config.gpu_options.allow_growth = True
 
         session.run(init)
-
-        state_op_pair = session.run([encoded_variables], feed_dict={input_to_encoder: np.array(headlines)})
+        
+        # encoding training set
+        
+        state_op_pair = session.run([encoded_variables], feed_dict={input_to_encoder: np.array(headlines_train)})
         outputs = state_op_pair[0][0]
         # transposing to get the output in the form [max_time, batch_size, cell.output_size]
         outputs = np.transpose(outputs, (1, 0, 2))
-        encoded_op_batch_headlines = outputs[-1]
-        del headlines
+        X_train_head = outputs[-1]
+        del headlines_train
         del outputs
         gc.collect()
         
-        state_op_pair = session.run([encoded_variables], feed_dict={input_to_encoder: np.array(bodies)});
+        state_op_pair = session.run([encoded_variables], feed_dict={input_to_encoder: np.array(bodies_train)});
         outputs = state_op_pair[0][0]
         outputs = np.transpose(outputs, (1, 0, 2))
-        encoded_op_batch_bodies = outputs[-1]
-        del bodies
+        X_train_body = outputs[-1]
+        del bodies_train
+        del outputs
+        gc.collect()
+        
+        # encoding dev set
+        
+        state_op_pair = session.run([encoded_variables], feed_dict={input_to_encoder: np.array(headlines_dev)})
+        outputs = state_op_pair[0][0]
+        # transposing to get the output in the form [max_time, batch_size, cell.output_size]
+        outputs = np.transpose(outputs, (1, 0, 2))
+        X_dev_head = outputs[-1]
+        del headlines_dev
+        del outputs
+        gc.collect()
+        
+        state_op_pair = session.run([encoded_variables], feed_dict={input_to_encoder: np.array(bodies_dev)});
+        outputs = state_op_pair[0][0]
+        outputs = np.transpose(outputs, (1, 0, 2))
+        X_dev_body = outputs[-1]
+        del bodies_dev
+        del outputs
+        gc.collect()
+        
+        # encoding test set
+        
+        state_op_pair = session.run([encoded_variables], feed_dict={input_to_encoder: np.array(headlines_test)})
+        outputs = state_op_pair[0][0]
+        # transposing to get the output in the form [max_time, batch_size, cell.output_size]
+        outputs = np.transpose(outputs, (1, 0, 2))
+        X_test_head = outputs[-1]
+        del headlines_test
+        del outputs
+        gc.collect()
+        
+        state_op_pair = session.run([encoded_variables], feed_dict={input_to_encoder: np.array(bodies_test)});
+        outputs = state_op_pair[0][0]
+        outputs = np.transpose(outputs, (1, 0, 2))
+        X_test_body = outputs[-1]
+        del bodies_test
         del outputs
         gc.collect()
 
-        X_train_head, X_dev_head, X_train_body, X_dev_body, y_train, y_dev = split_dataset(encoded_op_batch_headlines,
-                                                                                           encoded_op_batch_bodies, y)
+        #X_train_head, X_dev_head, X_train_body, X_dev_body, y_train, y_dev = split_dataset(encoded_op_batch_headlines, encoded_op_batch_bodies, y)
         
-        result, test_accuracy, predictions = cross_validate(session, X_train_head, X_dev_head, X_train_body, X_dev_body, y_train,
-                                               y_dev)
+        #result, d_accuracy, d_predictions, t_accuracy, t_predictions = cross_validate(session, X_train_head, X_dev_head, X_test_head, X_train_body, X_dev_body, X_test_body, y_train, y_dev, y_test)
+        
+        d_accuracy, d_predictions, t_accuracy, t_predictions = trainOnly(session, X_train_head, X_dev_head, X_test_head, X_train_body, X_dev_body, X_test_body, y_train,
+                                               y_dev, y_test)
         print("\n")
-        print("Cross-validation result: ", result)
-        print("Training Accuracy: ",np.mean(np.array(result)))
-        print("Test accuracy: ", test_accuracy)
+        #print("Cross-validation result: ", result)
+        #print("Training Accuracy: ",np.mean(np.array(result)))
+        print("Dev accuracy: ", d_accuracy)
+        print("Test accuracy: ", t_accuracy)
         
-        saver.save(session, model_path)
+        #saver.save(session, model_path)

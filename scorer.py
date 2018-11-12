@@ -95,7 +95,7 @@ def score_defaults(gold_labels):
 def load_dataset(filename):
     data = None
     try:
-        with open(filename) as fh:
+        with open(filename, encoding='utf-8') as fh:
             reader = csv.DictReader(fh)
             if reader.fieldnames != FIELDNAMES:
                 error = 'ERROR: Incorrect headers in: {}'.format(filename)

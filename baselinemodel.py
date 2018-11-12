@@ -11,7 +11,7 @@ from word2vec_training import loadWord2VecConvertedFromGlove, loadWord2VecOnGoog
 
 # Parameters
 learning_rate = 0.001
-epochs = 20
+epochs = 40
 batch_size = 32
 hidden_nodes = 128
 dropout = 0.2
@@ -51,8 +51,15 @@ def forward_propagation(X):
 # Construct the model
 y_hat = forward_propagation(x)
 
+class_weights = tf.constant([[0.3, 0.3, 0.3, 0.1]], dtype=tf.float64)
+w = tf.reduce_sum(class_weights * y, axis=1)
+unweighted_losses = tf.nn.softmax_cross_entropy_with_logits_v2(labels=y, logits=y_hat)
+weighted_losses = unweighted_losses * w
+cost = tf.reduce_mean(weighted_losses)
+#cost = tf.reduce_mean(tf.losses.softmax_cross_entropy(logits = y_hat, onehot_labels = y, weights=class_weights))
+
 # Cost and optimizer functions
-cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits = y_hat, labels = y))
+#cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits = y_hat, labels = y))
 optimizer = tf.train.AdamOptimizer(learning_rate = learning_rate).minimize(cost)
 
 # Accuracy function
@@ -66,7 +73,7 @@ def clean(s):
     return " ".join(re.findall(r'\w+', s, flags = re.UNICODE)).lower()
 
 print("Loading word2vec model...")
-word2vec_model = loadWord2VecOnGoogleDataset()
+word2vec_model = loadWord2VecConvertedFromGlove()
 print("Finished loading word2vec model.")
     
 def prepare_dataset(bodiesfile, stancesfile):
@@ -191,7 +198,8 @@ def train_only(session, X_train, X_dev, X_test, y_train, y_dev, y_test):
         print("Epoch:", (epoch + 1), "cost =", "{:.3f}".format(avg_cost), "accuracy =", "{:.3f}".format(train_accuracy))
     dev_predictions, dev_accuracy = session.run([y_hat,accuracy], feed_dict={x: X_dev, y: y_dev})
     test_predictions, test_accuracy = session.run([y_hat, accuracy], feed_dict = {x: X_test, y: y_test})
-    return dev_accuracy, test_predictions, test_accuracy , dev_predictions    
+    return dev_accuracy, test_predictions, test_accuracy , dev_predictions 
+   
 def main():
     X_train, y_train = prepare_dataset('./dataset/train_bodies1.csv','./dataset/train_stances1.csv')
     X_dev, y_dev = prepare_dataset('./dataset/dev_bodies1.csv','./dataset/dev_stances1.csv')
