@@ -47,8 +47,8 @@ input_to_encoder = tf.placeholder(shape=(None, None, 300), dtype=tf.float64, nam
 encoded_variables = lstm_encoder(input_to_encoder, hidden_nodes)
 
 # Encoding the body
-initial_c=tf.placeholder(tf.float64, [None, 128],name='initial_c')
-initial_h=tf.placeholder(tf.float64, [None, 128],name='initial_h')
+initial_c = tf.placeholder(tf.float64, [None, 128],name='initial_c')
+initial_h = tf.placeholder(tf.float64, [None, 128],name='initial_h')
 initial_state = rnn.LSTMStateTuple(c=initial_c, h=initial_h)
 encoded_bodies = encode_body(input_to_encoder,128,initial_state)
 
@@ -167,7 +167,6 @@ def prepare_dataset():
     print('Headline body pairs formed.')
     del headline_body_pairs
     del stances
-    del word2vec_model
     gc.collect()
     return headline_body_pairs_vec, stances_onehotencoded
 
