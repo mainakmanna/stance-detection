@@ -182,9 +182,9 @@ def pipeline_train(train, test, lim_unigram):
             tfidf_cos = cos_track[(head, body_id)]
         
         # np.c_: Translates slice objects to concatenation along the second axis.
-        # In this case [[h1,h2,...,h5000]][[cos]][[b1,b2,...,b5000]] will become
-        # [[h1,h2,...,h5000,cos,b1,b2,...,b5000]]. Squeezing it becomes
-        # [h1,h2,...,h5000,cos,b1,b2,...,b5000]--->feat_vec
+        # In this case [[h1,h2,...,h5000]][[b1,b2,...,b5000]][[cos]] will become
+        # [[h1,h2,...,h5000,b1,b2,...,b5000,cos]]. Squeezing it becomes
+        # [h1,h2,...,h5000,b1,b2,...,b5000,cos]--->feat_vec
         
         feat_vec = np.squeeze(np.c_[head_tf, body_tf, tfidf_cos])
         train_set.append(feat_vec)
