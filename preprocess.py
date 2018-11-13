@@ -3,20 +3,33 @@ import csv
 from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
 
-def loadDataset(bodies, stances):
-    dataset_bodies = pd.read_csv(bodies)
-    dataset_stances = pd.read_csv(stances)
+def loadDataset(bodies_path, stances_path):
+    """
+    Given the file path of FNC bodies and stances path it loads the data.
+
+    Args:
+        bodies_path: path to bodies file.
+        stances_path: path to stances file.
+
+    Returns:
+        headline_body_pairs: list of headline body pairs
+        stances: list of stances        
+    """
+    headline_body_pairs = None
+    stances = None
+    if stances_path is not None:
+        dataset_stances = pd.read_csv(stances_path)
+        # array that holds individual stances for each headline-body pair
+        stances = dataset_stances.iloc[:, 2]
+        if bodies_path is not None:
+            dataset_bodies = pd.read_csv(bodies_path)
+            bodies_dict = dict(zip(dataset_bodies['Body ID'], dataset_bodies['articleBody']))
+            headline_body_pairs = dataset_stances.iloc[:, 0:2].values
     
-    bodies_dict = dict(zip(dataset_bodies['Body ID'], dataset_bodies['articleBody']))
-    headline_body_pairs = dataset_stances.iloc[:, 0:2].values
-    
-    for index in range(0, len(headline_body_pairs)):
-        # replacing body id with actual body
-        headline_body_pairs[index,1] = bodies_dict.get(headline_body_pairs[index,1])
-    
-    # array that holds individual stances for each headline-body pair
-    stances = dataset_stances.iloc[:, 2]
-    
+            for index in range(0, len(headline_body_pairs)):
+                # replacing body id with actual body
+                headline_body_pairs[index,1] = bodies_dict.get(headline_body_pairs[index,1])
+
     return headline_body_pairs, stances
 
 def loadTestDataset():
